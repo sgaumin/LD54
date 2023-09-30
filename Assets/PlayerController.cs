@@ -1,8 +1,8 @@
-using Cysharp.Threading.Tasks.Triggers;
 using NaughtyAttributes;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 using static Facade;
 
 public enum PlayerMoveType
@@ -15,6 +15,9 @@ public enum PlayerMoveType
 public class PlayerController : MonoBehaviour
 {
     [SerializeField] private PlayerStartLinePointsSO startData;
+
+    [Header("Debug")]
+    [SerializeField] private Vector2 debugSplitPoint;
 
     private int currentStratumIndex;
     private List<PlayerLinePoint> linePoints;
@@ -32,10 +35,20 @@ public class PlayerController : MonoBehaviour
         StratumManager.OnStratumChanged += UpdateVisuals;
 
         // Assign start positions
-        linePoints = startData.LinePoints.ToList();
+        if (startData != null)
+        {
+            linePoints = startData.LinePoints.ToList();
 
-        // Set starting stratum index
-        currentStratumIndex = startData.LinePoints[^1].StratumIndex;
+            // Set starting stratum index
+            currentStratumIndex = startData.LinePoints[^1].StratumIndex;
+        }
+    }
+
+    public void Initialize(List<PlayerLinePoint> linePoints)
+    {
+        this.linePoints = linePoints;
+        currentStratumIndex = linePoints[^1].StratumIndex;
+        UpdateVisuals();
     }
 
     private void OnDestroy()
@@ -48,9 +61,9 @@ public class PlayerController : MonoBehaviour
         InputManager.OnAction2Event -= Descend;
 
         StratumManager.OnStratumChanged -= UpdateVisuals;
-    }
 
-    #region MOVEMENTS
+        ReturnLineRenderers();
+    }
 
     private List<Vector3[]> GetLines(int stratumIndex = -1)
     {
@@ -90,11 +103,7 @@ public class PlayerController : MonoBehaviour
 
     private void UpdateVisuals(int stratumIndex = -1)
     {
-        // Return all lines currently used
-        foreach (LineRenderer lineRenderer in lineRenderers)
-            Lines.Return(lineRenderer);
-
-        lineRenderers.Clear();
+        ReturnLineRenderers();
 
         // If using default, get current stratum index
         if (stratumIndex == -1)
@@ -110,6 +119,17 @@ public class PlayerController : MonoBehaviour
             line.SetPositions(linePoints);
             line.transform.SetParent(transform);
         }
+    }
+
+    private void ReturnLineRenderers()
+    {
+        // Prevents singleton null reference
+        if (Lines == null) return;
+
+        foreach (LineRenderer lineRenderer in lineRenderers)
+            Lines.Return(lineRenderer);
+
+        lineRenderers.Clear();
     }
 
     private void MoveTop()
@@ -147,21 +167,21 @@ public class PlayerController : MonoBehaviour
         // Check if there is a stratum above
         if (type == PlayerMoveType.Ascend && currentStratumIndex == 0)
         {
-            Debug.LogWarning($"PlayerController: Trying to Ascend when no stratum has been find above");
+            Debug.LogWarning($"PlayerController: Trying to Ascend when no stratum has been find above", this);
             return;
         }
 
         // Check if there is a stratum below
         if (type == PlayerMoveType.Descend && currentStratumIndex >= Stratums.Count - 1)
         {
-            Debug.LogWarning($"PlayerController: Trying to descend when no stratum has been find below");
+            Debug.LogWarning($"PlayerController: Trying to descend when no stratum has been find below", this);
             return;
         }
 
         // We don't want to move the player if we are not on the correct stratum
         if (currentStratumIndex != Stratums.CurrentStratumIndex)
         {
-            Debug.LogWarning($"PlayerController: Trying to more when not seeing the head");
+            Debug.LogWarning($"PlayerController: Trying to more when not seeing the head", this);
             return;
         }
 
@@ -209,5 +229,52 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    #endregion
+    [Button]
+    private void SplitDebug()
+    {
+        Split(debugSplitPoint);
+    }
+
+    private void Split(Vector2 splitPoint)
+    {
+        // Find line point index
+        int splitIndex = -1;
+        foreach (PlayerLinePoint line in linePoints)
+        {
+            if (line.Position == splitPoint)
+            {
+                splitIndex = linePoints.IndexOf(line);
+                break;
+            }
+        }
+
+        // Checking split point existence
+        if (splitIndex == -1)
+        {
+            Debug.LogWarning($"PlayerController: Split: No line point found at {splitPoint}", this);
+            return;
+        }
+
+        // Split line points in half
+        List<PlayerLinePoint> firstHalf = linePoints.Take(splitIndex).ToList();
+        List<PlayerLinePoint> secondHalf = linePoints.TakeLast(linePoints.Count - 1 - splitIndex).ToList();
+
+        // Check if cuts have at least 3 points
+        if (firstHalf.Count >= 3)
+        {
+            // Instantiate a new player
+            PlayerController newPlayer = Instantiate(Prefabs.playerPrefab);
+            newPlayer.Initialize(firstHalf);
+        }
+
+        if (secondHalf.Count >= 3)
+        {
+            linePoints = secondHalf;
+            UpdateVisuals();
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
+    }
 }

@@ -1,7 +1,9 @@
+using Cysharp.Threading.Tasks;
 using NaughtyAttributes;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using UnityEngine;
 
 public class StratumManager : MonoBehaviour
@@ -11,6 +13,8 @@ public class StratumManager : MonoBehaviour
 
     [SerializeField] private int startIndex = 0;
     [SerializeField] private List<Stratum> stratums;
+
+    private bool alreadyPendingUpdate;
 
     public int Count => stratums.Count;
     public Stratum CurrentStratum => stratums[CurrentStratumIndex];
@@ -70,14 +74,36 @@ public class StratumManager : MonoBehaviour
     [Button]
     public void GoUp()
     {
+        GoUpAsync(this.GetCancellationTokenOnDestroy()).Forget();
+    }
+
+    private async UniTaskVoid GoUpAsync(CancellationToken cancellationToken)
+    {
+        if (alreadyPendingUpdate) return;
+
+        alreadyPendingUpdate = true;
+        await UniTask.Yield(PlayerLoopTiming.LastPostLateUpdate, cancellationToken);
+
         // We decrease index to go up, this is expected
         CurrentStratumIndex--;
+        alreadyPendingUpdate = false;
     }
 
     [Button]
     public void GoDown()
     {
+        GoDownAsync(this.GetCancellationTokenOnDestroy()).Forget();
+    }
+
+    private async UniTaskVoid GoDownAsync(CancellationToken cancellationToken)
+    {
+        if (alreadyPendingUpdate) return;
+
+        alreadyPendingUpdate = true;
+        await UniTask.Yield(cancellationToken);
+
         // We increase index to go down, this is expected
         CurrentStratumIndex++;
+        alreadyPendingUpdate = false;
     }
 }

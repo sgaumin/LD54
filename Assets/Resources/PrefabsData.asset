@@ -12,3 +12,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c95a299028f60b0458109ac2543b8d77, type: 3}
   m_Name: PrefabsData
   m_EditorClassIdentifier: 
+  playerPrefab: {fileID: 1241122206404773201, guid: 05e160da81d07b848aa8540c23f1c93c,
+    type: 3}

@@ -2,9 +2,10 @@ using Utils;
 
 public sealed class PrefabsData : BaseIndex
 {
-	private static PrefabsData _instance;
+    private static PrefabsData _instance;
 
-	public static PrefabsData Instance => GetOrLoad(ref _instance);
+    public static PrefabsData Instance => GetOrLoad(ref _instance);
 
-	// Set up your references below!
+    // Set up your references below!
+    public PlayerController playerPrefab;
 }
