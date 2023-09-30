@@ -1,91 +1,85 @@
+using System;
 using UnityEngine;
 using static Facade;
 
 public class InputManager : MonoBehaviour
 {
-	private const KeyCode RESTART = KeyCode.R;
-	private readonly KeyCode[] QWERTY = new KeyCode[4] { KeyCode.W, KeyCode.S, KeyCode.A, KeyCode.D };
-	private readonly KeyCode[] AZERTY = new KeyCode[4] { KeyCode.Z, KeyCode.S, KeyCode.Q, KeyCode.D };
+    private const KeyCode RESTART = KeyCode.R;
+    private const KeyCode ACTION1 = KeyCode.X;
+    private const KeyCode ACTION2 = KeyCode.C;
 
-	public static Vector2 InputDirection;
+    public static Action OnTopEvent;
+    public static Action OnDownEvent;
+    public static Action OnLeftEvent;
+    public static Action OnRightEvent;
+    public static Action OnAction1Event;
+    public static Action OnAction2Event;
 
-	private KeyCode[] _codes;
-
-	private void Start()
-	{
-		_codes = GetKeyCodes();
-	}
-
-	private void Update()
-	{
+    private void Update()
+    {
 #if UNITY_STANDALONE_OSX || UNITY_STANDALONE_WIN || UNITY_STANDALONE_LINUX || UNITY_EDITOR
-		if (Input.GetButtonDown("Quit"))
-		{
-			Level.Quit();
-		}
-		if (Input.GetButtonDown("Mute"))
-		{
-			Level.Mute();
-		}
-		if (Input.GetButtonDown("Fullscreen"))
-		{
-			Screen.fullScreen = !Screen.fullScreen;
-		}
+        if (Input.GetButtonDown("Quit"))
+        {
+            Level.Quit();
+        }
 #endif
 
-		ListenRestart();
-		ListenKeyAxis();
-	}
+        ListenRestart();
+        ListenKeyAxis();
+    }
 
-	private static void ListenRestart()
-	{
-		if (!Level.IsRunning && Input.GetKeyDown(RESTART))
-		{
-			Level.ReloadScene();
-		}
-	}
+    private static void ListenRestart()
+    {
+        if (!Level.IsRunning && Input.GetKeyDown(RESTART))
+        {
+            Level.ReloadScene();
+        }
+    }
 
-	private void ListenKeyAxis()
-	{
-		if (!Level.IsRunning) return;
+    private void ListenKeyAxis()
+    {
+        //if (!Level.IsRunning) return;
 
-		if (Input.GetKey(_codes[0]) || Input.GetKey(KeyCode.UpArrow)) // UP
-		{
-			InputDirection.y = 1;
-		}
-		else if (Input.GetKey(_codes[1]) || Input.GetKey(KeyCode.DownArrow)) // DOWN
-		{
-			InputDirection.y = -1;
-		}
-		else
-		{
-			InputDirection.y = 0;
-		}
+        // UP
+        if (Input.GetKeyDown(KeyCode.UpArrow))
+        {
+            Debug.Log($"InputManager: OnTopEvent");
+            OnTopEvent?.Invoke();
+        }
 
-		if (Input.GetKey(_codes[2]) || Input.GetKey(KeyCode.LeftArrow)) // LEFT
-		{
-			InputDirection.x = -1;
-		}
-		else if (Input.GetKey(_codes[3]) || Input.GetKey(KeyCode.RightArrow)) // RIGHT
-		{
-			InputDirection.x = 1;
-		}
-		else
-		{
-			InputDirection.x = 0;
-		}
-	}
+        // DOWN
+        if (Input.GetKeyDown(KeyCode.DownArrow))
+        {
+            Debug.Log($"InputManager: OnDownEvent");
+            OnDownEvent?.Invoke();
+        }
 
-	private KeyCode[] GetKeyCodes()
-	{
-		string language = System.Globalization.CultureInfo.CurrentCulture.TwoLetterISOLanguageName;
-		switch (language)
-		{
-			case "fr":
-				return AZERTY;
+        // LEFT
+        if (Input.GetKeyDown(KeyCode.LeftArrow))
+        {
+            Debug.Log($"InputManager: OnLeftEvent");
+            OnLeftEvent?.Invoke();
+        }
 
-			default:
-				return QWERTY;
-		}
-	}
+        // RIGHT
+        if (Input.GetKeyDown(KeyCode.RightArrow))
+        {
+            Debug.Log($"InputManager: OnRightEvent");
+            OnRightEvent?.Invoke();
+        }
+
+        // Action 1
+        if (Input.GetKeyDown(ACTION1))
+        {
+            Debug.Log($"InputManager: OnAction1Event");
+            OnAction1Event?.Invoke();
+        }
+
+        // Action 2
+        if (Input.GetKeyDown(ACTION2))
+        {
+            Debug.Log($"InputManager: OnAction2Event");
+            OnAction2Event?.Invoke();
+        }
+    }
 }
