@@ -1,8 +1,11 @@
+using Cysharp.Threading.Tasks;
 using NaughtyAttributes;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using UnityEngine;
 using UnityEngine.UIElements;
+using Utils;
 using static Facade;
 
 public enum PlayerMoveType
@@ -29,14 +32,20 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private Transform colliderHolder;
     [SerializeField] private Transform visualHolder;
 
+    [Header("Line Animation")]
+    [SerializeField] private float lineAnimationOffset = 0.1f;
+    [SerializeField] private float lineAnimationSpeed = 10f;
+    [SerializeField] private float lineAnimationStep = 10f;
+
     [Header("Debug")]
     [SerializeField] private Vector2 debugSplitPoint;
 
     private int currentStratumIndex;
-    private List<LineRenderer> lineRenderers = new List<LineRenderer>();
-    private List<BoxCollider2D> colliders = new List<BoxCollider2D>();
-    private List<GameObject> visualHelpers = new List<GameObject>();
+    private List<LineRenderer> lineRenderers = new();
+    private List<BoxCollider2D> colliders = new();
+    private List<GameObject> visualHelpers = new();
     private List<PlayerLinePoint> linePoints;
+    private CancellationTokenSource lineWaveAnimationCancellationSource = new();
 
     private void Awake()
     {
@@ -80,7 +89,7 @@ public class PlayerController : MonoBehaviour
 
         StratumManager.OnStratumChanged -= UpdateVisuals;
 
-        ReturnLineRenderers();
+        CleanUp();
     }
 
     private List<PlayerLine> GetLines()
@@ -126,7 +135,6 @@ public class PlayerController : MonoBehaviour
 
     private void UpdateVisuals(int stratumIndex = -1)
     {
-        ReturnLineRenderers();
         CleanUp();
 
         // If using default, get current stratum index
@@ -209,10 +217,50 @@ public class PlayerController : MonoBehaviour
 
             currentLineIndex++;
         }
+
+        LineWaveAnimation(lineWaveAnimationCancellationSource.Token).Forget();
+    }
+
+    private async UniTask LineWaveAnimation(CancellationToken cancellationToken)
+    {
+        List<Keyframe[]> startKeys = new();
+        for (int i = 0; i < lineRenderers.Count; i++)
+        {
+            LineRenderer line = lineRenderers[i];
+            AnimationCurve curve = line.widthCurve;
+            startKeys.Add(curve.keys);
+        }
+
+        if (lineRenderers.Count > 0)
+        {
+            while (true)
+            {
+                await UniTask.Yield(cancellationToken);
+
+                for (int i = 0; i < lineRenderers.Count; i++)
+                {
+                    LineRenderer line = lineRenderers[i];
+                    AnimationCurve curve = line.widthCurve;
+                    curve = line.widthCurve;
+                    for (int j = 0; j < curve.keys.Length; j++)
+                    {
+                        curve.MoveKey(j,
+                            new Keyframe(
+                                startKeys[i][j].time,
+                                startKeys[i][j].value + lineAnimationOffset * Mathf.Sin(Time.time * lineAnimationSpeed + j * lineAnimationStep)));
+                        line.widthCurve = curve;
+                    }
+                }
+            }
+        }
     }
 
     private void CleanUp()
     {
+        ReturnLineRenderers();
+
+        lineWaveAnimationCancellationSource = lineWaveAnimationCancellationSource.SafeReset();
+
         colliders.ForEach(x => Destroy(x.gameObject));
         colliders.Clear();
 

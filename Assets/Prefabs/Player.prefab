@@ -83,6 +83,9 @@ MonoBehaviour:
   lineHolder: {fileID: 5891532329020280110}
   colliderHolder: {fileID: 6332260868106666958}
   visualHolder: {fileID: 6821859070404504473}
+  lineAnimationOffset: 0.08
+  lineAnimationSpeed: 5
+  lineAnimationStep: 20
   debugSplitPoint: {x: 0, y: 0}
 --- !u!1 &2055463892164679172
 GameObject:
