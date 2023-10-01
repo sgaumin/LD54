@@ -2,7 +2,7 @@ using NaughtyAttributes;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using UnityEngine.Rendering.Universal;
+using UnityEngine.UIElements;
 using static Facade;
 
 public enum PlayerMoveType
@@ -16,12 +16,19 @@ public class PlayerController : MonoBehaviour
 {
     [SerializeField] private PlayerStartLinePointsSO startData;
 
+    [SerializeField] private float defaultSize = 0.5f;
+
+    [Header("References")]
+    [SerializeField] private Transform lineHolder;
+    [SerializeField] private Transform collidersHolder;
+
     [Header("Debug")]
     [SerializeField] private Vector2 debugSplitPoint;
 
     private int currentStratumIndex;
-    private List<PlayerLinePoint> linePoints;
+    private List<BoxCollider2D> lineColliders = new List<BoxCollider2D>();
     private List<LineRenderer> lineRenderers = new List<LineRenderer>();
+    private List<PlayerLinePoint> linePoints;
 
     private void Awake()
     {
@@ -38,6 +45,7 @@ public class PlayerController : MonoBehaviour
         if (startData != null)
         {
             linePoints = startData.LinePoints.ToList();
+            RegisterPositions();
 
             // Set starting stratum index
             currentStratumIndex = startData.LinePoints[^1].StratumIndex;
@@ -47,6 +55,8 @@ public class PlayerController : MonoBehaviour
     public void Initialize(List<PlayerLinePoint> linePoints)
     {
         this.linePoints = linePoints;
+        RegisterPositions();
+
         currentStratumIndex = linePoints[^1].StratumIndex;
         UpdateVisuals();
     }
@@ -104,21 +114,65 @@ public class PlayerController : MonoBehaviour
     private void UpdateVisuals(int stratumIndex = -1)
     {
         ReturnLineRenderers();
+        RemoveColliders();
 
         // If using default, get current stratum index
         if (stratumIndex == -1)
             stratumIndex = Stratums.CurrentStratumIndex;
 
         List<Vector3[]> lines = GetLines(stratumIndex);
-        foreach (Vector3[] linePoints in lines)
+        foreach (Vector3[] line in lines)
         {
+            bool first = lines.IndexOf(line) == 0;
+            bool last = lines.IndexOf(line) == lines.Count - 1;
+
             // Get a line from pool, and update its visuals
-            LineRenderer line = Lines.Get();
-            lineRenderers.Add(line);
-            line.positionCount = linePoints.Length;
-            line.SetPositions(linePoints);
-            line.transform.SetParent(transform);
+            LineRenderer lineRenderer = Lines.Get();
+            lineRenderers.Add(lineRenderer);
+            lineRenderer.positionCount = line.Length;
+            lineRenderer.SetPositions(line);
+            lineRenderer.transform.SetParent(lineHolder);
+
+            // Setup colliders
+            int index = 0;
+            AnimationCurve widthCurve = new AnimationCurve();
+            List<Vector3> distinctLinePoints = line.Select(x => x).Distinct().ToList();
+            foreach (Vector3 linePoint in distinctLinePoints)
+            {
+                // Create tail
+                if (first && index == 0 && linePoints[0].StratumIndex == Stratums.CurrentStratumIndex)
+                {
+                    widthCurve.AddKey((float)index / distinctLinePoints.Count, distinctLinePoints.Count > 1f ? 0f : 0.3f);
+                }
+                else
+                {
+                    widthCurve.AddKey((float)index / distinctLinePoints.Count, defaultSize);
+                }
+
+                BoxCollider2D box = Instantiate(Prefabs.playerLineColliderPrefab, collidersHolder);
+                box.transform.position = linePoint;
+                lineColliders.Add(box);
+
+                index++;
+            }
+
+            // Add last point
+            if (last && currentStratumIndex == stratumIndex)
+            {
+                // Head detected
+            }
+
+            widthCurve.AddKey(1f, defaultSize);
+
+            // Assign back line width after modifications
+            lineRenderer.widthCurve = widthCurve;
         }
+    }
+
+    private void RemoveColliders()
+    {
+        lineColliders.ForEach(x => Destroy(x.gameObject));
+        lineColliders.Clear();
     }
 
     private void ReturnLineRenderers()
@@ -181,17 +235,39 @@ public class PlayerController : MonoBehaviour
         // We don't want to move the player if we are not on the correct stratum
         if (currentStratumIndex != Stratums.CurrentStratumIndex)
         {
-            Debug.LogWarning($"PlayerController: Trying to more when not seeing the head", this);
+            Debug.LogWarning($"PlayerController: Trying to move when not seeing the head", this);
             return;
         }
 
-        // TODO: Check if we can actually go in this direction
-
         // Compute next position
         List<Vector3[]> positions = GetLines();
-        Vector3 next = positions[^1][^1];
+        Vector3 current = positions[^1][^1];
+        Vector3 next = current;
         if (type == PlayerMoveType.Normal)
             next += (Vector3)direction;
+
+        // Check if next position is accessible
+        if (type == PlayerMoveType.Normal)
+        {
+            if (!Stratums.HasFreeSpaceAt(next))
+            {
+                Debug.LogWarning($"PlayerController: Trying to move but location not accessible at {next}", this);
+                return;
+            }
+        }
+        else
+        {
+            if (type == PlayerMoveType.Ascend && !Stratums.HasFreeSpaceAt(next, currentStratumIndex - 1))
+            {
+                Debug.LogWarning($"PlayerController: Trying to ascend to -{currentStratumIndex - 1} but location not accessible at {next}", this);
+                return;
+            }
+            else if (type == PlayerMoveType.Descend && !Stratums.HasFreeSpaceAt(next, currentStratumIndex + 1))
+            {
+                Debug.LogWarning($"PlayerController: Trying to descend to -{currentStratumIndex + 1} but location not accessible at {next}", this);
+                return;
+            }
+        }
 
         // Update parameter value
         switch (type)
@@ -211,6 +287,7 @@ public class PlayerController : MonoBehaviour
         nextLinePoint.StratumIndex = currentStratumIndex;
         linePoints.Add(nextLinePoint);
         linePoints.RemoveAt(0);
+        RegisterPositions();
 
         // Update visuals
         switch (type)
@@ -270,11 +347,30 @@ public class PlayerController : MonoBehaviour
         if (secondHalf.Count >= 3)
         {
             linePoints = secondHalf;
+            RegisterPositions();
+
             UpdateVisuals();
         }
         else
         {
             Destroy(gameObject);
         }
+    }
+
+    private void RegisterPositions()
+    {
+        // Split position per stratum
+        Dictionary<int, List<Vector2>> positionPerStratum = new Dictionary<int, List<Vector2>>();
+        foreach (PlayerLinePoint linePoint in linePoints)
+        {
+            if (!positionPerStratum.ContainsKey(linePoint.StratumIndex))
+                positionPerStratum.Add(linePoint.StratumIndex, new List<Vector2>());
+
+            positionPerStratum[linePoint.StratumIndex].Add(linePoint.Position);
+        }
+
+        // Update stratum used locations
+        foreach (KeyValuePair<int, List<Vector2>> positions in positionPerStratum)
+            Stratums.UpdatePositions(gameObject, positions.Key, positions.Value);
     }
 }

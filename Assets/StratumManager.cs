@@ -69,6 +69,8 @@ public class StratumManager : MonoBehaviour
     private void Start()
     {
         CurrentStratumIndex = startIndex;
+
+        stratums.ForEach(x => x.GetGrounds());
     }
 
     [Button]
@@ -95,6 +97,35 @@ public class StratumManager : MonoBehaviour
         GoDownAsync(this.GetCancellationTokenOnDestroy()).Forget();
     }
 
+    public bool HasFreeSpaceAt(Vector2 position, int stratumIndex = -1)
+    {
+        if (stratumIndex == -1)
+            stratumIndex = CurrentStratumIndex;
+
+        if (!HasGroundAt(position, stratumIndex))
+        {
+            Debug.Log($"StratumManager: HasFreeSpaceAt: No ground detected on stratum {stratumIndex} at {position}");
+            return false;
+        }
+
+        // Loop through all stored data
+        foreach (List<Vector2> positions in stratums[stratumIndex].UsedPositions.Values)
+        {
+            if (positions.Contains(position))
+                return false;
+        }
+
+        return true;
+    }
+
+    private bool HasGroundAt(Vector2 position, int stratumIndex = -1)
+    {
+        if (stratumIndex == -1)
+            stratumIndex = CurrentStratumIndex;
+
+        return stratums[stratumIndex].GroundPositions.Contains(position);
+    }
+
     private async UniTaskVoid GoDownAsync(CancellationToken cancellationToken)
     {
         if (alreadyPendingUpdate) return;
@@ -105,5 +136,13 @@ public class StratumManager : MonoBehaviour
         // We increase index to go down, this is expected
         CurrentStratumIndex++;
         alreadyPendingUpdate = false;
+    }
+
+    public void UpdatePositions(GameObject gameObject, int stratumIndex, List<Vector2> positions)
+    {
+        if (!stratums[stratumIndex].UsedPositions.ContainsKey(gameObject))
+            stratums[stratumIndex].UsedPositions.Add(gameObject, new List<Vector2>());
+
+        stratums[stratumIndex].UsedPositions[gameObject] = positions;
     }
 }

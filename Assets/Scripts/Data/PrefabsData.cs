@@ -1,3 +1,4 @@
+using UnityEngine;
 using Utils;
 
 public sealed class PrefabsData : BaseIndex
@@ -8,4 +9,5 @@ public sealed class PrefabsData : BaseIndex
 
     // Set up your references below!
     public PlayerController playerPrefab;
+    public BoxCollider2D playerLineColliderPrefab;
 }
