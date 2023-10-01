@@ -16,3 +16,7 @@ MonoBehaviour:
     type: 3}
   playerLineColliderPrefab: {fileID: 6803125617656638905, guid: 720033884d958bf4da2f0c183d024122,
     type: 3}
+  playerHolePrefab: {fileID: 5503347369591543977, guid: c6f2b1b0721161c4ab75b1a26d77892f,
+    type: 3}
+  playerInnerBodyPrefab: {fileID: 6585589284819586671, guid: 73f6f9b52e5b6ff47852ea2ce3ecd4de,
+    type: 3}

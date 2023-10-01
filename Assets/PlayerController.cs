@@ -12,6 +12,12 @@ public enum PlayerMoveType
     Descend
 }
 
+public struct PlayerLine
+{
+    public int stratumIndex;
+    public Vector3[] positions;
+}
+
 public class PlayerController : MonoBehaviour
 {
     [SerializeField] private PlayerStartLinePointsSO startData;
@@ -20,14 +26,16 @@ public class PlayerController : MonoBehaviour
 
     [Header("References")]
     [SerializeField] private Transform lineHolder;
-    [SerializeField] private Transform collidersHolder;
+    [SerializeField] private Transform colliderHolder;
+    [SerializeField] private Transform visualHolder;
 
     [Header("Debug")]
     [SerializeField] private Vector2 debugSplitPoint;
 
     private int currentStratumIndex;
-    private List<BoxCollider2D> lineColliders = new List<BoxCollider2D>();
     private List<LineRenderer> lineRenderers = new List<LineRenderer>();
+    private List<BoxCollider2D> colliders = new List<BoxCollider2D>();
+    private List<GameObject> visualHelpers = new List<GameObject>();
     private List<PlayerLinePoint> linePoints;
 
     private void Awake()
@@ -75,9 +83,9 @@ public class PlayerController : MonoBehaviour
         ReturnLineRenderers();
     }
 
-    private List<Vector3[]> GetLines(int stratumIndex = -1)
+    private List<PlayerLine> GetLines()
     {
-        void Register(List<Vector3[]> lines, List<Vector3> positions)
+        void Register(List<PlayerLine> lines, int stratumIndex, List<Vector3> positions)
         {
             if (positions.Count > 0)
             {
@@ -85,28 +93,33 @@ public class PlayerController : MonoBehaviour
                 if (positions.Count == 1)
                     positions.Add(positions[0]);
 
-                lines.Add(positions.ToArray());
+                PlayerLine line = new PlayerLine();
+                line.stratumIndex = stratumIndex;
+                line.positions = positions.ToArray();
+
+                lines.Add(line);
                 positions.Clear();
             }
         }
 
-        if (stratumIndex == -1)
-            stratumIndex = Stratums.CurrentStratumIndex;
-
-        List<Vector3[]> lines = new List<Vector3[]>();
+        List<PlayerLine> lines = new List<PlayerLine>();
         List<Vector3> positions = new List<Vector3>();
+        int previousStratumIndex = -1;
         foreach (PlayerLinePoint linePoint in linePoints)
         {
-            if (linePoint.StratumIndex != stratumIndex)
+            if (previousStratumIndex < 0)
+                previousStratumIndex = linePoint.StratumIndex;
+
+            if (linePoint.StratumIndex != previousStratumIndex)
             {
-                Register(lines, positions);
-                continue;
+                Register(lines, previousStratumIndex, positions);
+                previousStratumIndex = linePoint.StratumIndex;
             }
 
             positions.Add(linePoint.Position);
         }
 
-        Register(lines, positions);
+        Register(lines, previousStratumIndex, positions);
 
         return lines;
     }
@@ -114,65 +127,97 @@ public class PlayerController : MonoBehaviour
     private void UpdateVisuals(int stratumIndex = -1)
     {
         ReturnLineRenderers();
-        RemoveColliders();
+        CleanUp();
 
         // If using default, get current stratum index
         if (stratumIndex == -1)
             stratumIndex = Stratums.CurrentStratumIndex;
 
-        List<Vector3[]> lines = GetLines(stratumIndex);
-        foreach (Vector3[] line in lines)
+        int currentLineIndex = 0;
+        int previousStratumIndex = -1;
+        int nextStratumIndex = -1;
+        List<PlayerLine> lines = GetLines();
+        foreach (PlayerLine line in lines)
         {
-            bool first = lines.IndexOf(line) == 0;
-            bool last = lines.IndexOf(line) == lines.Count - 1;
-
-            // Get a line from pool, and update its visuals
-            LineRenderer lineRenderer = Lines.Get();
-            lineRenderers.Add(lineRenderer);
-            lineRenderer.positionCount = line.Length;
-            lineRenderer.SetPositions(line);
-            lineRenderer.transform.SetParent(lineHolder);
-
-            // Setup colliders
-            int index = 0;
-            AnimationCurve widthCurve = new AnimationCurve();
-            List<Vector3> distinctLinePoints = line.Select(x => x).Distinct().ToList();
-            foreach (Vector3 linePoint in distinctLinePoints)
+            if (line.stratumIndex == stratumIndex)
             {
-                // Create tail
-                if (first && index == 0 && linePoints[0].StratumIndex == Stratums.CurrentStratumIndex)
+                // Caching parameters
+                bool first = lines.IndexOf(line) == 0;
+                bool last = lines.IndexOf(line) == lines.Count - 1;
+                nextStratumIndex = currentLineIndex < lines.Count - 1 ? lines[currentLineIndex + 1].stratumIndex : -1;
+
+                // Get a line from pool, and update its visuals
+                LineRenderer lineRenderer = Lines.Get();
+                lineRenderers.Add(lineRenderer);
+                lineRenderer.positionCount = line.positions.Length;
+                lineRenderer.SetPositions(line.positions);
+                lineRenderer.transform.SetParent(lineHolder);
+
+                // Setup colliders
+                int i = 0;
+                AnimationCurve widthCurve = new AnimationCurve();
+                List<Vector3> distinctLinePoints = line.positions.Select(x => x).Distinct().ToList();
+                foreach (Vector3 linePoint in distinctLinePoints)
                 {
-                    widthCurve.AddKey((float)index / distinctLinePoints.Count, distinctLinePoints.Count > 1f ? 0f : 0.3f);
-                }
-                else
-                {
-                    widthCurve.AddKey((float)index / distinctLinePoints.Count, defaultSize);
+                    // Create tail
+                    if (first && i == 0 && linePoints[0].StratumIndex == Stratums.CurrentStratumIndex)
+                    {
+                        widthCurve.AddKey((float)i / distinctLinePoints.Count, distinctLinePoints.Count > 1f ? 0.2f : 0.35f);
+                    }
+                    else
+                    {
+                        widthCurve.AddKey((float)i / distinctLinePoints.Count, defaultSize);
+                    }
+
+                    // Show visual indicators on first index
+                    if (i == 0 && previousStratumIndex >= 0 && previousStratumIndex != stratumIndex)
+                    {
+                        GameObject visual = Instantiate(previousStratumIndex > stratumIndex ? Prefabs.playerHolePrefab : Prefabs.playerInnerBodyPrefab, visualHolder);
+                        visual.transform.position = linePoint;
+                        visualHelpers.Add(visual);
+                    }
+
+                    // Show visual indicators on last index
+                    if (i == distinctLinePoints.Count - 1 && nextStratumIndex >= 0 && nextStratumIndex != stratumIndex)
+                    {
+                        GameObject visual = Instantiate(nextStratumIndex > stratumIndex ? Prefabs.playerHolePrefab : Prefabs.playerInnerBodyPrefab, visualHolder);
+                        visual.transform.position = linePoint;
+                        visualHelpers.Add(visual);
+                    }
+
+                    BoxCollider2D box = Instantiate(Prefabs.playerLineColliderPrefab, colliderHolder);
+                    box.transform.position = linePoint;
+                    visualHelpers.Add(box.gameObject);
+
+                    i++;
                 }
 
-                BoxCollider2D box = Instantiate(Prefabs.playerLineColliderPrefab, collidersHolder);
-                box.transform.position = linePoint;
-                lineColliders.Add(box);
+                // Add last point
+                if (last && currentStratumIndex == stratumIndex)
+                {
+                    // Head detected
+                }
 
-                index++;
+                widthCurve.AddKey(1f, defaultSize);
+
+                // Assign back line width after modifications
+                lineRenderer.widthCurve = widthCurve;
             }
 
-            // Add last point
-            if (last && currentStratumIndex == stratumIndex)
-            {
-                // Head detected
-            }
+            // Caching
+            previousStratumIndex = line.stratumIndex;
 
-            widthCurve.AddKey(1f, defaultSize);
-
-            // Assign back line width after modifications
-            lineRenderer.widthCurve = widthCurve;
+            currentLineIndex++;
         }
     }
 
-    private void RemoveColliders()
+    private void CleanUp()
     {
-        lineColliders.ForEach(x => Destroy(x.gameObject));
-        lineColliders.Clear();
+        colliders.ForEach(x => Destroy(x.gameObject));
+        colliders.Clear();
+
+        visualHelpers.ForEach(x => Destroy(x.gameObject));
+        visualHelpers.Clear();
     }
 
     private void ReturnLineRenderers()
@@ -240,8 +285,7 @@ public class PlayerController : MonoBehaviour
         }
 
         // Compute next position
-        List<Vector3[]> positions = GetLines();
-        Vector3 current = positions[^1][^1];
+        Vector3 current = linePoints[^1].Position;
         Vector3 next = current;
         if (type == PlayerMoveType.Normal)
             next += (Vector3)direction;
@@ -368,6 +412,9 @@ public class PlayerController : MonoBehaviour
 
             positionPerStratum[linePoint.StratumIndex].Add(linePoint.Position);
         }
+
+        // CLear out all positions cached
+        Stratums.ClearPositions(gameObject);
 
         // Update stratum used locations
         foreach (KeyValuePair<int, List<Vector2>> positions in positionPerStratum)

@@ -145,4 +145,13 @@ public class StratumManager : MonoBehaviour
 
         stratums[stratumIndex].UsedPositions[gameObject] = positions;
     }
+
+    public void ClearPositions(GameObject gameObject)
+    {
+        foreach (Stratum stratum in stratums)
+        {
+            if (stratum.UsedPositions.ContainsKey(gameObject))
+                stratum.UsedPositions.Remove(gameObject);
+        }
+    }
 }

@@ -10,4 +10,6 @@ public sealed class PrefabsData : BaseIndex
     // Set up your references below!
     public PlayerController playerPrefab;
     public BoxCollider2D playerLineColliderPrefab;
+    public GameObject playerHolePrefab;
+    public GameObject playerInnerBodyPrefab;
 }
